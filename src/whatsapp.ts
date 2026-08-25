@@ -34,6 +34,8 @@ import qrimage from 'qrcode';
 import makeWASocket, {
   Browsers,
   DisconnectReason,
+  downloadMediaMessage,
+  extractMessageContent,
   fetchLatestBaileysVersion,
   fetchLatestWaWebVersion,
   isJidGroup,
@@ -41,9 +43,8 @@ import makeWASocket, {
   isJidStatusBroadcast,
   jidDecode,
   useMultiFileAuthState,
-  downloadMediaMessage,
-  type WASocket,
   type WAMessage,
+  type WASocket,
 } from '@whiskeysockets/baileys';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -238,6 +239,21 @@ let file: Promise<void> = Promise.resolve();
 let dernierEnvoi = 0;
 
 /**
+ * Adresse de chat WhatsApp pour repondre (souvent @lid), indexee par l'identite
+ * canonique utilisee en base (@s.whatsapp.net ou @lid de repli).
+ */
+const adressesEnvoi = new Map<string, string>();
+
+function memoriserAdresseEnvoi(jidIdentite: string, remoteJidChat: string): void {
+  if (!jidIdentite || !remoteJidChat) return;
+  adressesEnvoi.set(jidIdentite, remoteJidChat);
+}
+
+function jidPourEnvoi(jidIdentite: string): string {
+  return adressesEnvoi.get(jidIdentite) ?? jidIdentite;
+}
+
+/**
  * Envoi centralise. C'est la SEULE fonction autorisee a ecrire sur WhatsApp.
  * `jid` designe l'utilisateur destinataire — plus de destination fixe unique.
  * Le coupe-circuit anti-boucle reste volontairement GLOBAL (tout compte
@@ -252,6 +268,9 @@ export function envoyer(jid: string, message: string): Promise<void> {
       return;
     }
 
+    // Toujours repondre sur le JID de chat d'origine (souvent @lid), pas seulement
+    // sur la forme @s.whatsapp.net — sinon les tiers ne recoivent rien.
+    const destinataire = jidPourEnvoi(jid);
     const morceaux = decouper(message, LONGUEUR_MAX_MESSAGE);
 
     for (const morceau of morceaux) {
@@ -263,15 +282,16 @@ export function envoyer(jid: string, message: string): Promise<void> {
 
       try {
         memoriserContenuEmis(morceau);
-        const envoye = await sock.sendMessage(jid, { text: morceau });
+        const envoye = await sock.sendMessage(destinataire, { text: morceau });
         if (envoye?.key?.id) memoriserEmission(envoye.key.id);
         dernierEnvoi = Date.now();
-        // En INFO : un envoi est un evenement significatif, et c'est en le
-        // taisant qu'une boucle a tourne 40 s sans laisser de trace lisible
-        // (constate le 15/08/2026 avec l'ancienne bibliotheque).
-        logger.info('Message envoye', { jid, caracteres: morceau.length });
+        logger.info('Message envoye', {
+          jid,
+          destinataire,
+          caracteres: morceau.length,
+        });
       } catch (erreur) {
-        logger.error('Envoi WhatsApp en echec', { jid, erreur });
+        logger.error('Envoi WhatsApp en echec', { jid, destinataire, erreur });
       }
     }
   });
@@ -334,6 +354,31 @@ async function jidCanonique(remoteJid: string): Promise<string | null> {
   return `${decoded.user}@s.whatsapp.net`;
 }
 
+/** Preferer les metadonnees PN (@s.whatsapp.net) fournies par Baileys v7. */
+async function jidIdentiteDepuisMessage(message: WAMessage): Promise<string | null> {
+  const cle = message.key as {
+    remoteJid?: string | null;
+    remoteJidAlt?: string | null;
+    senderPn?: string | null;
+    participantPn?: string | null;
+    participantAlt?: string | null;
+  };
+
+  const candidats = [cle.senderPn, cle.remoteJidAlt, cle.participantPn, cle.participantAlt].filter(
+    (v): v is string => Boolean(v),
+  );
+
+  for (const candidat of candidats) {
+    const decoded = jidDecode(candidat);
+    if (decoded?.user && decoded.server !== 'lid') {
+      return `${decoded.user}@s.whatsapp.net`;
+    }
+  }
+
+  if (!cle.remoteJid) return null;
+  return jidCanonique(cle.remoteJid);
+}
+
 /** Telecharge une piece jointe. Baileys lit directement les serveurs media de
  * WhatsApp via les cles chiffrees du message : pas de navigateur, pas de
  * magasin interne, donc pas de la classe de panne rencontree avec
@@ -366,20 +411,13 @@ async function traiterPieceJointeEntrante(
 }
 
 async function traiterMessage(message: WAMessage): Promise<void> {
-  logger.debug('Message a traiter', {
-    remoteJid: message.key.remoteJid,
-    fromMe: message.key.fromMe,
-    id: message.key.id,
-    aDocument: Boolean(message.message?.documentMessage),
-    aTexte: Boolean(message.message?.conversation ?? message.message?.extendedTextMessage?.text),
-    cles: message.message ? Object.keys(message.message) : [],
-  });
-
   const remoteJid = message.key.remoteJid;
   if (!estChatIndividuel(remoteJid)) return;
 
-  const jid = await jidCanonique(remoteJid!);
+  const jid = await jidIdentiteDepuisMessage(message);
   if (!jid) return;
+
+  memoriserAdresseEnvoi(jid, remoteJid!);
 
   const id = message.key.id;
   if (id && idsEmis.has(id)) {
@@ -387,13 +425,45 @@ async function traiterMessage(message: WAMessage): Promise<void> {
     return;
   }
 
-  const document = message.message?.documentMessage;
+  // Dans le chat d'un tiers, fromMe = echo du bot (ou reponse manuelle du
+  // telephone lie) : on n'y traite pas comme une commande utilisateur.
+  if (message.key.fromMe && jid !== jidProprietaire) {
+    return;
+  }
+
+  const contenu = extractMessageContent(message.message) ?? message.message;
+  logger.info('Message entrant', {
+    jid,
+    remoteJid,
+    fromMe: message.key.fromMe,
+    cles: contenu ? Object.keys(contenu) : [],
+  });
+
+  const document =
+    contenu?.documentMessage ??
+    contenu?.documentWithCaptionMessage?.message?.documentMessage ??
+    null;
+
   if (document) {
     await traiterPieceJointeEntrante(jid, message, document.mimetype, document.fileName);
     return;
   }
 
-  const texte = message.message?.conversation ?? message.message?.extendedTextMessage?.text;
+  if (contenu?.imageMessage) {
+    await envoyer(
+      jid,
+      'J ai bien recu ton image, mais j analyse uniquement un CV en PDF ou DOCX.\n' +
+        'Envoie le fichier en piece jointe (document), pas en photo.',
+    );
+    return;
+  }
+
+  const texte =
+    contenu?.conversation ??
+    contenu?.extendedTextMessage?.text ??
+    contenu?.imageMessage?.caption ??
+    null;
+
   if (typeof texte === 'string' && texte.length > 0) {
     // Le filet par contenu ne sert que pour le chat du proprietaire (seul cas
     // ou fromMe est ambigu entre "tape par lui" et "echo du bot"). Pour un
