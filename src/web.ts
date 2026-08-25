@@ -59,6 +59,12 @@ function exigerAuthAdmin(req: Request, res: Response, next: NextFunction): void 
     next();
     return;
   }
+  if (!config.ADMIN_USER || !config.ADMIN_PASSWORD) {
+    res.status(503).send(
+      'Dashboard non configure : definis ADMIN_USER et ADMIN_PASSWORD dans les variables du service.',
+    );
+    return;
+  }
   const entete = req.headers.authorization;
   if (!entete?.startsWith('Basic ')) {
     res.setHeader('WWW-Authenticate', 'Basic realm="Veille admin"');

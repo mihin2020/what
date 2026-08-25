@@ -16,6 +16,22 @@ export const RACINE = path.resolve(ICI, '..');
 
 dotenv.config({ path: path.join(RACINE, '.env') });
 
+/** Railway / Fly / Render : le healthcheck doit atteindre 0.0.0.0. */
+function hebergeurCloud(): boolean {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.FLY_APP_NAME ||
+      process.env.RENDER ||
+      process.env.K_SERVICE,
+  );
+}
+
+if (hebergeurCloud()) {
+  if (!process.env.WEB_BIND) process.env.WEB_BIND = '0.0.0.0';
+  if (!process.env.WHATSAPP_TLS_INSECURE) process.env.WHATSAPP_TLS_INSECURE = 'false';
+}
+
 const heureRegex = /^([01]?\d|2[0-3]):([0-5]\d)$/;
 
 const schema = z.object({
@@ -109,10 +125,12 @@ fs.mkdirSync(dossierLogs, { recursive: true });
 
 const webExposePubliquement = env.WEB_BIND !== '127.0.0.1' && env.WEB_BIND !== 'localhost';
 if (webExposePubliquement && (!env.ADMIN_USER || !env.ADMIN_PASSWORD)) {
-  console.error(
-    '\nWEB_BIND expose le dashboard hors localhost : ADMIN_USER et ADMIN_PASSWORD sont obligatoires.\n',
+  // Ne pas tuer le process : sinon le healthcheck Railway echoue en boucle.
+  // Le dashboard refuse alors tout acces jusqu'a configuration des identifiants.
+  console.warn(
+    '\n[WARN] ADMIN_USER / ADMIN_PASSWORD manquants : le dashboard restera inaccessible (401).\n' +
+      'Ajoute-les dans les variables Railway, puis redeploie.\n',
   );
-  process.exit(1);
 }
 
 export const config = {
