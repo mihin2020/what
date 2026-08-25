@@ -1,0 +1,49 @@
+# fly.toml — https://fly.io
+# Prérequis : compte Fly + `flyctl` installé (https://fly.io/docs/hands-on/install-flyctl/)
+#
+# Commandes :
+#   fly auth login
+#   fly apps create whatsapp-veille   # ou un nom libre
+#   fly volumes create veille_data --region cdg --size 1
+#   fly secrets set NUMERO_AUTORISE=... DEEPSEEK_API_KEY=... ADMIN_USER=... ADMIN_PASSWORD=...
+#   fly deploy
+#
+# Important WhatsApp : auto_stop_machines = false (sinon la session se coupe).
+
+app = 'whatsapp-veille'
+primary_region = 'cdg'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  WEB_BIND = '0.0.0.0'
+  DATA_DIR = '/data'
+  PORT = '3000'
+  WHATSAPP_TLS_INSECURE = 'false'
+  LOG_LEVEL = 'info'
+  FUSEAU = 'Africa/Ouagadougou'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '60s'
+    method = 'GET'
+    path = '/health'
+
+[[mounts]]
+  source = 'veille_data'
+  destination = '/data'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

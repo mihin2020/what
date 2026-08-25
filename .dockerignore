@@ -1,0 +1,12 @@
+# Contexte Docker : ne pas envoyer secrets ni caches locaux
+node_modules
+dist
+.git
+.env
+data
+logs
+*.log
+*.sqlite
+.DS_Store
+README.md
+tools

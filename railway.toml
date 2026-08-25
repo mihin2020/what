@@ -1,0 +1,15 @@
+# Railway — https://railway.app
+# New Project → Deploy from GitHub → repo mihin2020/what
+# Puis : Variables + Volume monté sur /data
+#
+# Build / start sont aussi détectés via le Dockerfile.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
