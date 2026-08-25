@@ -45,7 +45,11 @@ const CHEMIN_QR = path.join(config.chemins.data, 'qr.png');
 
 /** Probe Render / load balancer — sans auth. */
 app.get('/health', (_req, res) => {
-  res.status(200).json({ ok: true });
+  res.status(200).json({
+    ok: true,
+    build: process.env.BUILD_MARKER ?? 'local',
+    qrMode: 'memory',
+  });
 });
 
 function motsDePasseEgaux(a: string, b: string): boolean {

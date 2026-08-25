@@ -38,6 +38,8 @@ logger.info('Demarrage de whatsapp-veille', {
   bind: config.WEB_BIND,
   port: config.PORT,
   data: config.chemins.data,
+  build: process.env.BUILD_MARKER ?? 'local',
+  qrMode: 'memory',
 });
 
 try {
