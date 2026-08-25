@@ -27,7 +27,7 @@
  */
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
-import { readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import qrimage from 'qrcode';
@@ -597,20 +597,10 @@ async function creerSocket(): Promise<WASocket> {
       qrcode.generate(qr, { small: true });
       qrimage
         .toBuffer(qr, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
-        .then(async (buf) => {
-          // Memoire d'abord : le dashboard affiche meme si le disque echoue.
+        .then((buf) => {
           qrPng = buf;
           qrGenereLe = Date.now();
-          try {
-            await mkdir(config.chemins.data, { recursive: true });
-            await writeFile(CHEMIN_QR, buf);
-          } catch (erreurDisque) {
-            logger.warn('QR en memoire OK ; ecriture disque ignoree', {
-              chemin: CHEMIN_QR,
-              erreur: erreurDisque,
-            });
-          }
-          logger.info('QR pret pour le dashboard', { chemin: CHEMIN_QR, octets: buf.length });
+          logger.info('QR pret pour le dashboard', { octets: buf.length });
         })
         .catch((erreur) => logger.error('Generation du QR en image en echec', erreur));
     }

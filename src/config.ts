@@ -137,8 +137,13 @@ const dossierData = env.DATA_DIR.trim()
   ? path.resolve(env.DATA_DIR.trim())
   : path.join(RACINE, 'data');
 const dossierLogs = path.join(RACINE, 'logs');
-fs.mkdirSync(dossierData, { recursive: true });
-fs.mkdirSync(dossierLogs, { recursive: true });
+for (const dossier of [dossierData, dossierLogs, path.join(RACINE, 'data')]) {
+  try {
+    fs.mkdirSync(dossier, { recursive: true });
+  } catch (erreur) {
+    console.warn(`[WARN] Impossible de creer ${dossier}`, erreur);
+  }
+}
 
 const webExposePubliquement = env.WEB_BIND !== '127.0.0.1' && env.WEB_BIND !== 'localhost';
 if (webExposePubliquement && (!env.ADMIN_USER || !env.ADMIN_PASSWORD)) {

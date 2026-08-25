@@ -1,5 +1,5 @@
 # Image de prod pour Railway / Fly / Render
-# cachebust: 2026-08-25-qr3
+# cachebust: 2026-08-25-qr-memory
 FROM node:22.13-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
