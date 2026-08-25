@@ -19,6 +19,7 @@ import { jidProprietaire } from './identite.js';
 import { envoyer, type PieceJointe } from './whatsapp.js';
 import { extraireCV } from './cv/extraction.js';
 import { analyserCV, ErreurDocumentNonCV } from './cv/analyse.js';
+import { ErreurIA } from './ia/client.js';
 import { executerCycle, executerRecherchePostCv, etatSources } from './veille.js';
 import { SOURCES } from './sources/index.js';
 import {
@@ -555,6 +556,53 @@ async function commandeTestMinute(jid: string): Promise<void> {
   );
 }
 
+/** Message WhatsApp lisible selon la cause reelle de l'echec d'analyse. */
+function messageErreurAnalyseCV(erreur: unknown): string {
+  const cause = erreur instanceof ErreurIA ? erreur.cause : erreur;
+  const code =
+    (cause as { status?: number; response?: { status?: number } } | undefined)?.status ??
+    (cause as { response?: { status?: number } } | undefined)?.response?.status ??
+    null;
+  const texte = String(
+    (cause as { message?: string } | undefined)?.message ??
+      (erreur as { message?: string } | undefined)?.message ??
+      '',
+  );
+
+  if (
+    code === 401 ||
+    code === 403 ||
+    /invalid.?api.?key|incorrect.?api.?key|authentication|unauthorized|MISSING_SET_IN_RAILWAY/i.test(
+      texte,
+    ) ||
+    config.DEEPSEEK_API_KEY === 'MISSING_SET_IN_RAILWAY'
+  ) {
+    return (
+      "Je n'ai pas pu analyser ce CV : la cle DeepSeek est absente ou invalide sur le serveur.\n" +
+      'Verifie `DEEPSEEK_API_KEY` dans Railway (Variables), puis renvoie le CV.'
+    );
+  }
+
+  if (code === 402 || /insufficient|quota|balance|billing/i.test(texte)) {
+    return (
+      "Je n'ai pas pu analyser ce CV : credit DeepSeek insuffisant.\n" +
+      'Recharge le compte DeepSeek, puis renvoie le CV.'
+    );
+  }
+
+  if (erreur instanceof ErreurIA && /schema|JSON valide/i.test(erreur.message)) {
+    return (
+      "J'ai bien lu le fichier, mais l'analyse n'a pas renvoye un profil exploitable.\n" +
+      'Renvoie un CV PDF/DOCX plus clair, ou reessaie dans quelques minutes.'
+    );
+  }
+
+  return (
+    "Je n'ai pas reussi a analyser ce CV (le service d'analyse n'a pas repondu correctement).\n" +
+    'Reessaie dans quelques minutes.'
+  );
+}
+
 export async function traiterPieceJointe(jid: string, piece: PieceJointe): Promise<void> {
   await accueillirSiNouveau(jid);
 
@@ -581,11 +629,7 @@ export async function traiterPieceJointe(jid: string, piece: PieceJointe): Promi
       return;
     }
     logger.error('Analyse du CV en echec', { jid, erreur });
-    await envoyer(
-      jid,
-      "Je n'ai pas reussi a analyser ce CV (le service d'analyse n'a pas repondu correctement). " +
-        'Reessaie dans quelques minutes.',
-    );
+    await envoyer(jid, messageErreurAnalyseCV(erreur));
     return;
   }
 
