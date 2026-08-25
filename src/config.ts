@@ -28,8 +28,22 @@ function hebergeurCloud(): boolean {
 }
 
 if (hebergeurCloud()) {
-  if (!process.env.WEB_BIND) process.env.WEB_BIND = '0.0.0.0';
+  // Toujours joignable par le proxy / healthcheck (jamais 127.0.0.1 en cloud).
+  if (!process.env.WEB_BIND || process.env.WEB_BIND === '127.0.0.1' || process.env.WEB_BIND === 'localhost') {
+    process.env.WEB_BIND = '0.0.0.0';
+  }
   if (!process.env.WHATSAPP_TLS_INSECURE) process.env.WHATSAPP_TLS_INSECURE = 'false';
+  if (!process.env.DATA_DIR) process.env.DATA_DIR = '/data';
+  // Placeholders pour ne pas tuer le process avant le healthcheck.
+  // Remplace-les dans les variables Railway (sinon WhatsApp / IA ne marcheront pas).
+  if (!process.env.NUMERO_AUTORISE?.trim()) {
+    console.warn('[WARN] NUMERO_AUTORISE manquant — placeholder temporaire pour demarrer.');
+    process.env.NUMERO_AUTORISE = '00000000000@c.us';
+  }
+  if (!process.env.DEEPSEEK_API_KEY?.trim()) {
+    console.warn('[WARN] DEEPSEEK_API_KEY manquant — placeholder temporaire pour demarrer.');
+    process.env.DEEPSEEK_API_KEY = 'MISSING_SET_IN_RAILWAY';
+  }
 }
 
 const heureRegex = /^([01]?\d|2[0-3]):([0-5]\d)$/;

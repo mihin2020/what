@@ -219,14 +219,23 @@ app.get('/', (_req, res) => {
 let serveur: ReturnType<typeof app.listen> | undefined;
 
 export function demarrerServeurWeb(): void {
-  serveur = app.listen(config.PORT, config.WEB_BIND, () => {
-    const url =
-      config.WEB_BIND === '127.0.0.1' || config.WEB_BIND === 'localhost'
-        ? `http://127.0.0.1:${config.PORT}`
-        : `http://${config.WEB_BIND}:${config.PORT}`;
-    logger.info(`Interface web disponible sur ${url}`, {
-      bind: config.WEB_BIND,
+  // En prod (Docker / Railway), toujours 0.0.0.0 — sinon healthcheck = "service unavailable".
+  const bind =
+    process.env.NODE_ENV === 'production' || config.webExposePubliquement
+      ? '0.0.0.0'
+      : config.WEB_BIND;
+  serveur = app.listen(config.PORT, bind, () => {
+    logger.info(`Interface web disponible sur http://${bind}:${config.PORT}`, {
+      bind,
+      port: config.PORT,
       auth: config.webExposePubliquement,
+    });
+  });
+  serveur.on('error', (erreur) => {
+    logger.error('Echec listen HTTP (healthcheck Railway echouera)', {
+      bind,
+      port: config.PORT,
+      erreur,
     });
   });
 }

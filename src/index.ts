@@ -28,10 +28,26 @@ process.on('unhandledRejection', (raison) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Amorcage                                                            */
+/* Amorcage HTTP d'abord (healthcheck Railway / Fly)                   */
 /* ------------------------------------------------------------------ */
 
-initialiserSchema();
+logger.info('Demarrage de whatsapp-veille', {
+  fuseau: config.FUSEAU,
+  modele: config.DEEPSEEK_MODELE,
+  node: process.version,
+  bind: config.WEB_BIND,
+  port: config.PORT,
+  data: config.chemins.data,
+});
+
+try {
+  initialiserSchema();
+} catch (erreur) {
+  logger.error('Schema SQLite en echec — le dashboard demarre quand meme', erreur);
+}
+
+// Le healthcheck ne doit pas attendre WhatsApp.
+demarrerServeurWeb();
 
 /* ------------------------------------------------------------------ */
 /* Cablage des evenements                                              */
@@ -44,7 +60,7 @@ definirExecuteur(async (jid) => {
 bus.on('texte', (jid: string, texte: string) => {
   traiterTexte(jid, texte).catch((erreur) => {
     logger.error('Traitement du texte en echec', { jid, erreur });
-    void envoyer(jid, "Aie, une erreur interne. Reessaie, ou tape !aide.");
+    void envoyer(jid, 'Aie, une erreur interne. Reessaie, ou tape !aide.');
   });
 });
 
@@ -128,19 +144,9 @@ async function arreterProprement(code = 0): Promise<void> {
 process.on('SIGINT', () => void arreterProprement(0));
 process.on('SIGTERM', () => void arreterProprement(0));
 
-logger.info('Demarrage de whatsapp-veille', {
-  fuseau: config.FUSEAU,
-  modele: config.DEEPSEEK_MODELE,
-  node: process.version,
-});
-
-// L'interface web ne depend pas de WhatsApp : elle reste utilisable (upload de
-// CV, analyse, recherche d'offres) meme si la connexion WhatsApp echoue.
-demarrerServeurWeb();
-
 demarrer().catch((erreur) => {
   logger.error(
-    'Demarrage du client WhatsApp impossible. L interface web reste disponible.',
+    "Demarrage du client WhatsApp impossible. L interface web reste disponible.",
     erreur,
   );
 });
