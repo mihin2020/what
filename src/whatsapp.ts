@@ -26,8 +26,8 @@
  *  - les envois sont serialises avec une temporisation de 1 a 2 s.
  */
 import { EventEmitter } from 'node:events';
-import { join, resolve } from 'node:path';
-import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import qrimage from 'qrcode';
@@ -70,7 +70,8 @@ export const bus = new BusEvenements();
 
 /** Numero sans le suffixe @c.us : format attendu par l'appairage Baileys. */
 const numeroBrut = config.NUMERO_AUTORISE.replace(/@c\.us$/, '');
-const CHEMIN_QR = resolve('data', 'qr.png');
+/** Toujours sous DATA_DIR (ex. /data sur Railway), jamais ./data relatif. */
+const CHEMIN_QR = join(config.chemins.data, 'qr.png');
 
 /** Logger interne de Baileys : redirige vers le notre serait bruyant, on le tait. */
 const waLogger = pino({ level: 'silent' });
@@ -79,6 +80,8 @@ let sock: WASocket | undefined;
 let pret = false;
 /** Horodatage du dernier QR ecrit (dashboard : savoir s'il y a une image fraiche). */
 let qrGenereLe: number | null = null;
+/** PNG du QR en memoire (evite un ecart disque entre process et dashboard). */
+let qrPng: Buffer | null = null;
 /** Code d'appairage a 8 caracteres, si APPAIRAGE_PAR_CODE est actif. */
 let codeAppairage: string | null = null;
 /** true juste apres un scan reussi (515) : la session se finalise. */
@@ -88,6 +91,7 @@ let versionCache: [number, number, number] | undefined;
 
 export const estPret = () => pret;
 export const dernierQrGenereLe = () => qrGenereLe;
+export const tamponQrPng = () => qrPng;
 export const codeAppairageActuel = () => codeAppairage;
 export const estLiaisonEnCours = () => liaisonEnCours;
 
@@ -102,6 +106,7 @@ async function effacerSessionLocale(): Promise<void> {
   await rm(config.chemins.session, { recursive: true, force: true });
   await rm(CHEMIN_QR, { force: true }).catch(() => undefined);
   qrGenereLe = null;
+  qrPng = null;
   codeAppairage = null;
 }
 
@@ -591,10 +596,12 @@ async function creerSocket(): Promise<WASocket> {
       logger.info('QR code a scanner (WhatsApp > Appareils lies > Lier un appareil)');
       qrcode.generate(qr, { small: true });
       qrimage
-        .toFile(CHEMIN_QR, qr, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
-        .then(() => {
+        .toBuffer(qr, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
+        .then(async (buf) => {
+          qrPng = buf;
           qrGenereLe = Date.now();
-          logger.info(`QR egalement disponible sur http://127.0.0.1:${config.PORT}`);
+          await writeFile(CHEMIN_QR, buf);
+          logger.info('QR pret pour le dashboard', { chemin: CHEMIN_QR });
         })
         .catch((erreur) => logger.error('Ecriture du QR en image en echec', erreur));
     }
@@ -605,6 +612,7 @@ async function creerSocket(): Promise<WASocket> {
       liaisonEnCours = false;
       tentativesReconnexion = 0;
       qrGenereLe = null;
+      qrPng = null;
       codeAppairage = null;
       void rm(CHEMIN_QR, { force: true }).catch(() => undefined);
       logger.info('Client WhatsApp pret');

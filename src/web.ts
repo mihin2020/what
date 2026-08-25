@@ -20,6 +20,7 @@ import { logger } from './logger.js';
 import {
   codeAppairageActuel,
   dernierQrGenereLe,
+  tamponQrPng,
   estLiaisonEnCours,
   estPret,
   numeroConnecte,
@@ -90,11 +91,13 @@ app.use(exigerAuthAdmin);
 
 app.get('/api/statut', (_req, res) => {
   const qrLe = dernierQrGenereLe();
+  const png = tamponQrPng();
   res.json({
     pret: estPret(),
     numero: numeroConnecte(),
-    qrDisponible: qrLe !== null,
+    qrDisponible: qrLe !== null && png !== null,
     qrAgeMs: qrLe ? Date.now() - qrLe : null,
+    qrDataUrl: png ? `data:image/png;base64,${png.toString('base64')}` : null,
     codeAppairage: codeAppairageActuel(),
     appairageParCode: config.APPAIRAGE_PAR_CODE,
     liaisonEnCours: estLiaisonEnCours(),
@@ -102,6 +105,12 @@ app.get('/api/statut', (_req, res) => {
 });
 
 app.get('/qr.png', async (_req, res) => {
+  const memoire = tamponQrPng();
+  if (memoire) {
+    res.set('Cache-Control', 'no-store');
+    res.type('png').send(memoire);
+    return;
+  }
   try {
     const donnees = await readFile(CHEMIN_QR);
     res.set('Cache-Control', 'no-store');
@@ -905,11 +914,11 @@ function rafraichirStatut() {
         qr.hidden = true;
         ph.hidden = true;
         msg.textContent = 'Saisis ce code dans WhatsApp → Lier avec le numéro de téléphone.';
-      } else if (s.qrDisponible) {
+      } else if (s.qrDisponible || s.qrDataUrl) {
         codeBox.hidden = true;
         ph.hidden = true;
         qr.hidden = false;
-        qr.src = '/qr.png?t=' + Date.now();
+        qr.src = s.qrDataUrl || ('/qr.png?t=' + Date.now());
         var age = s.qrAgeMs != null ? Math.round(s.qrAgeMs / 1000) : null;
         msg.textContent = age != null
           ? 'QR prêt (généré il y a ' + age + ' s). Il se renouvelle tout seul.'
