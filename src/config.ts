@@ -67,12 +67,15 @@ const schema = z.object({
 
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
 
-  // Panneau d'administration local : connexion WhatsApp, utilisateurs,
-  // statistiques, sources, cle API. Volontairement liee a 127.0.0.1
-  // uniquement (voir src/web.ts) : le QR affiche donne acces au compte
-  // WhatsApp, elle ne doit jamais etre exposee au-dela de la machine locale
-  // sans authentification.
+  // Panneau d'administration. En local : 127.0.0.1. Sur Render : 0.0.0.0
+  // (obligatoire pour les health checks) + ADMIN_USER / ADMIN_PASSWORD.
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  WEB_BIND: z.string().default('127.0.0.1'),
+  // Identifiants HTTP Basic pour le dashboard si WEB_BIND != 127.0.0.1.
+  ADMIN_USER: z.string().optional().default(''),
+  ADMIN_PASSWORD: z.string().optional().default(''),
+  // Disque persistant (Render Disk) : session WhatsApp + SQLite. Ex. /var/data
+  DATA_DIR: z.string().optional().default(''),
 });
 
 const resultat = schema.safeParse(process.env);
@@ -97,13 +100,24 @@ try {
   process.exit(1);
 }
 
-const dossierData = path.join(RACINE, 'data');
+const dossierData = env.DATA_DIR.trim()
+  ? path.resolve(env.DATA_DIR.trim())
+  : path.join(RACINE, 'data');
 const dossierLogs = path.join(RACINE, 'logs');
 fs.mkdirSync(dossierData, { recursive: true });
 fs.mkdirSync(dossierLogs, { recursive: true });
 
+const webExposePubliquement = env.WEB_BIND !== '127.0.0.1' && env.WEB_BIND !== 'localhost';
+if (webExposePubliquement && (!env.ADMIN_USER || !env.ADMIN_PASSWORD)) {
+  console.error(
+    '\nWEB_BIND expose le dashboard hors localhost : ADMIN_USER et ADMIN_PASSWORD sont obligatoires.\n',
+  );
+  process.exit(1);
+}
+
 export const config = {
   ...env,
+  webExposePubliquement,
 
   /** Chemins absolus des volumes persistants. */
   chemins: {

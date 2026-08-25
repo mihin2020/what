@@ -1,0 +1,48 @@
+# Blueprint Render — https://dashboard.render.com/
+# Important : plan Starter (ou plus) + disque persistant.
+# Le Free tier s'endort et coupe WhatsApp → inutilisable pour ce bot.
+
+services:
+  - type: web
+    name: whatsapp-veille
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: node --experimental-sqlite dist/index.js
+    healthCheckPath: /health
+    disk:
+      name: veille-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22.13.1"
+      - key: WEB_BIND
+        value: "0.0.0.0"
+      - key: DATA_DIR
+        value: /var/data
+      - key: WHATSAPP_TLS_INSECURE
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
+      - key: FUSEAU
+        value: Africa/Ouagadougou
+      - key: NUMERO_AUTORISE
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: RELIEFWEB_APPNAME
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: JOOBLE_CLE
+        sync: false
+      - key: CAREERJET_AFFID
+        sync: false

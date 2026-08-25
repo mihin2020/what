@@ -1,5 +1,5 @@
 /**
- * Interface web locale : panneau d'administration (section 6.9/6.10).
+ * Interface web : panneau d'administration (section 6.9/6.10).
  *
  * Le CV s'analyse exclusivement via WhatsApp (chaque utilisateur envoie le
  * sien) : ce serveur ne fait plus d'upload de CV. Il sert a l'operateur du
@@ -7,14 +7,14 @@
  * appairage), liste des utilisateurs, statistiques globales, etat des
  * sources, et cle API DeepSeek.
  *
- * SECURITE : liee a 127.0.0.1 uniquement. Le QR affiche donne acces complet
- * au compte WhatsApp, et cette page expose les numeros de tous les
- * utilisateurs et les couts IA. Ne JAMAIS exposer ce serveur au-dela de la
- * machine locale sans y ajouter une authentification.
+ * SECURITE : en local liee a 127.0.0.1. En production (Render), ecoute
+ * 0.0.0.0 avec HTTP Basic (ADMIN_USER / ADMIN_PASSWORD). /health reste
+ * public pour les probes Render.
  */
 import { readFile } from 'node:fs/promises';
+import { timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import {
@@ -41,6 +41,46 @@ import { SOURCES } from './sources/index.js';
 
 const app = express();
 const CHEMIN_QR = path.join(config.chemins.data, 'qr.png');
+
+/** Probe Render / load balancer — sans auth. */
+app.get('/health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+function motsDePasseEgaux(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+function exigerAuthAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!config.webExposePubliquement) {
+    next();
+    return;
+  }
+  const entete = req.headers.authorization;
+  if (!entete?.startsWith('Basic ')) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Veille admin"');
+    res.status(401).send('Authentification requise');
+    return;
+  }
+  const decode = Buffer.from(entete.slice(6), 'base64').toString('utf8');
+  const sep = decode.indexOf(':');
+  const user = sep >= 0 ? decode.slice(0, sep) : '';
+  const pass = sep >= 0 ? decode.slice(sep + 1) : '';
+  if (
+    motsDePasseEgaux(user, config.ADMIN_USER) &&
+    motsDePasseEgaux(pass, config.ADMIN_PASSWORD)
+  ) {
+    next();
+    return;
+  }
+  res.setHeader('WWW-Authenticate', 'Basic realm="Veille admin"');
+  res.status(401).send('Identifiants invalides');
+}
+
+app.use(exigerAuthAdmin);
 
 app.get('/api/statut', (_req, res) => {
   const qrLe = dernierQrGenereLe();
@@ -173,8 +213,15 @@ app.get('/', (_req, res) => {
 let serveur: ReturnType<typeof app.listen> | undefined;
 
 export function demarrerServeurWeb(): void {
-  serveur = app.listen(config.PORT, '127.0.0.1', () => {
-    logger.info(`Interface web disponible sur http://127.0.0.1:${config.PORT}`);
+  serveur = app.listen(config.PORT, config.WEB_BIND, () => {
+    const url =
+      config.WEB_BIND === '127.0.0.1' || config.WEB_BIND === 'localhost'
+        ? `http://127.0.0.1:${config.PORT}`
+        : `http://${config.WEB_BIND}:${config.PORT}`;
+    logger.info(`Interface web disponible sur ${url}`, {
+      bind: config.WEB_BIND,
+      auth: config.webExposePubliquement,
+    });
   });
 }
 
