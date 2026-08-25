@@ -33,7 +33,10 @@ if (hebergeurCloud()) {
     process.env.WEB_BIND = '0.0.0.0';
   }
   if (!process.env.WHATSAPP_TLS_INSECURE) process.env.WHATSAPP_TLS_INSECURE = 'false';
-  if (!process.env.DATA_DIR) process.env.DATA_DIR = '/data';
+  // Volume Railway/Fly : toujours /data (evite /app/data inexistant).
+  if (!process.env.DATA_DIR?.trim() || process.env.DATA_DIR.trim() === './data') {
+    process.env.DATA_DIR = '/data';
+  }
   // Placeholders pour ne pas tuer le process avant le healthcheck.
   // Remplace-les dans les variables Railway (sinon WhatsApp / IA ne marcheront pas).
   if (!process.env.NUMERO_AUTORISE?.trim()) {
