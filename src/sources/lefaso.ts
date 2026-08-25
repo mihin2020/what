@@ -94,6 +94,8 @@ async function chercher(_profil: Profil): Promise<Offre[]> {
 
 export const lefaso: Source = {
   nom: NOM,
-  actif: true,
+  // emploi.lefaso.net renvoie 401 / erreur PHP fatale (constate 25/08/2026).
+  // Reactive quand le portail repond a nouveau.
+  actif: false,
   chercher,
 };

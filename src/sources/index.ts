@@ -15,6 +15,10 @@ import { africarrieres } from './africarrieres.js';
 import { goafricaonline } from './goafricaonline.js';
 import { lefaso } from './lefaso.js';
 import { bfemploi } from './bfemploi.js';
+import { alertejob } from './alertejob.js';
+import { criburkina } from './criburkina.js';
+import { edomatch } from './edomatch.js';
+import { rmo } from './rmo.js';
 import { educarriere } from './educarriere.js';
 import { workingnomads } from './workingnomads.js';
 import { weworkremotely } from './weworkremotely.js';
@@ -43,6 +47,10 @@ export const SOURCES: Source[] = [
   goafricaonline,
   lefaso,
   bfemploi,
+  alertejob,
+  criburkina,
+  edomatch,
+  rmo,
   educarriere,
   novojob,
   workingnomads,
@@ -67,6 +75,10 @@ export const NOMS_SOURCES_FLASH = new Set([
   'themuse',
   'lefaso',
   'bfemploi',
+  'alertejob',
+  'criburkina',
+  'edomatch',
+  'rmo',
 ]);
 
 export const sourcesActives = (): Source[] => SOURCES.filter((s) => s.actif);

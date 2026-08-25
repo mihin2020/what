@@ -220,8 +220,6 @@ export function messageStats(stats: Statistiques): string {
     `Appels IA : ${stats.appelsMois}${stats.echecsMois ? ` (dont ${stats.echecsMois} en echec)` : ''}`,
     `Tokens : ${stats.tokensEntreeMois} en entree / ${stats.tokensSortieMois} en sortie`,
     `Cout IA estime : ${stats.coutEstimeUSD.toFixed(3)} USD`,
-    '',
-    '_Estimation basee sur les tarifs renseignes dans .env._',
   ].join('\n');
 }
 
@@ -232,7 +230,7 @@ export function messageSources(
   const lignes = ['🔌 *Sources*', ''];
 
   for (const source of sources) {
-    const etat = source.actif ? '✅ active' : '⛔ inactive (cle absente dans .env)';
+    const etat = source.actif ? '✅ active' : '⛔ inactive';
     const dernier = dernierCycle?.find((d) => d.nom === source.nom);
     const detail = dernier
       ? dernier.ok

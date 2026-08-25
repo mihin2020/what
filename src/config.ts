@@ -64,7 +64,7 @@ const schema = z.object({
   PRIX_ENTREE_USD_PAR_M: z.coerce.number().nonnegative().default(0.28),
   PRIX_SORTIE_USD_PAR_M: z.coerce.number().nonnegative().default(0.42),
 
-  RELIEFWEB_APPNAME: z.string().default('whatsapp-veille'),
+  RELIEFWEB_APPNAME: z.string().optional().default(''),
   ADZUNA_APP_ID: z.string().optional().default(''),
   ADZUNA_APP_KEY: z.string().optional().default(''),
   ADZUNA_PAYS: z.string().default('fr'),
